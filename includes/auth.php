@@ -95,37 +95,6 @@ function require_role($required_roles) {
 }
 
 /**
- * Check if current user has permission for specific action
- * @param string $permission
- * @return bool
- */
-function has_permission($permission) {
-    $user = get_logged_in_user();
-    if (!$user) return false;
-    
-    $role = $user['role'];
-    
-    switch ($permission) {
-        case 'view_all_leads':
-            return in_array($role, ['admin', 'marketing']);
-        case 'edit_leads':
-            return in_array($role, ['admin', 'sales']);
-        case 'add_leads':
-            return in_array($role, ['admin', 'sales']);
-        case 'delete_leads':
-            return $role === 'admin';
-        case 'view_analytics':
-            return in_array($role, ['admin', 'marketing']);
-        case 'export_leads':
-            return in_array($role, ['admin', 'sales', 'marketing']);
-        case 'manage_users':
-            return $role === 'admin';
-        default:
-            return false;
-    }
-}
-
-/**
  * Get user's assigned leads (for sales staff)
  * @param int $user_id
  * @return array
