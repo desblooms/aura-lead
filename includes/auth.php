@@ -20,10 +20,10 @@ function is_logged_in() {
 }
 
 /**
- * Get current user information
+ * Get current logged in user information
  * @return array|null
  */
-function get_current_user() {
+function get_logged_in_user() {
     if (!is_logged_in()) {
         return null;
     }
@@ -78,7 +78,7 @@ function require_login() {
 function require_role($required_roles) {
     require_login();
     
-    $user = get_current_user();
+    $user = get_logged_in_user();
     if (!$user) {
         header('Location: login.php');
         exit();
@@ -100,7 +100,7 @@ function require_role($required_roles) {
  * @return bool
  */
 function has_permission($permission) {
-    $user = get_current_user();
+    $user = get_logged_in_user();
     if (!$user) return false;
     
     $role = $user['role'];

@@ -14,7 +14,7 @@ if (!has_permission('export_leads')) {
     redirect_with_message('index.php', 'You do not have permission to export leads.', 'error');
 }
 
-$current_user = get_current_user();
+$current_user = get_logged_in_user();
 
 // Get leads based on user role
 $leads = get_leads_by_role($current_user['id'], $current_user['role']);

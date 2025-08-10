@@ -11,7 +11,7 @@ require_once 'includes/functions.php';
 require_login();
 require_role(['admin', 'marketing']);
 
-$current_user = get_current_user();
+$current_user = get_logged_in_user();
 
 // Get all leads for analytics (admin and marketing can see all)
 $all_leads = get_all("SELECT l.*, u.full_name as assigned_user FROM leads l LEFT JOIN users u ON l.assigned_to = u.id ORDER BY l.created_at DESC");
@@ -445,84 +445,6 @@ $conversion_rate = $total_contacted > 0 ? round((($interested_count + $meetings_
             }
         });
         <?php endif; ?>
-
-        // Auto-refresh charts every 5 minutes
-        setInterval(function() {
-            window.location.reload();
-        }, 300000);
-
-        // Print functionality
-        function printAnalytics() {
-            window.print();
-        }
-
-        // Export data functionality
-        function exportAnalyticsData() {
-            const data = {
-                totalLeads: <?php echo $total_leads; ?>,
-                conversionRate: <?php echo $conversion_rate; ?>,
-                upcomingFollowups: <?php echo $upcoming_followups; ?>,
-                overdueFollowups: <?php echo $overdue_followups; ?>,
-                statusBreakdown: <?php echo json_encode($status_counts); ?>,
-                industryBreakdown: <?php echo json_encode($industry_counts); ?>,
-                leadsOverTime: <?php echo json_encode($leads_by_date); ?>,
-                <?php if ($current_user['role'] === 'admin'): ?>
-                assignmentStats: <?php echo json_encode($assignment_stats); ?>,
-                <?php endif; ?>
-                generatedAt: new Date().toISOString()
-            };
-
-            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data, null, 2));
-            const downloadAnchorNode = document.createElement('a');
-            downloadAnchorNode.setAttribute("href", dataStr);
-            downloadAnchorNode.setAttribute("download", "analytics_data_" + new Date().toISOString().split('T')[0] + ".json");
-            document.body.appendChild(downloadAnchorNode);
-            downloadAnchorNode.click();
-            downloadAnchorNode.remove();
-        }
-
-        // Add export button to the page
-        document.addEventListener('DOMContentLoaded', function() {
-            const header = document.querySelector('h1').parentElement;
-            const exportButton = document.createElement('button');
-            exportButton.innerHTML = 'Export Data';
-            exportButton.className = 'bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded text-sm';
-            exportButton.onclick = exportAnalyticsData;
-            
-            const buttonContainer = document.createElement('div');
-            buttonContainer.className = 'mt-4';
-            buttonContainer.appendChild(exportButton);
-            header.appendChild(buttonContainer);
-        });
     </script>
-
-    <style>
-        @media print {
-            .no-print {
-                display: none !important;
-            }
-            
-            .bg-white {
-                background-color: white !important;
-            }
-            
-            .shadow {
-                box-shadow: none !important;
-                border: 1px solid #e5e7eb !important;
-            }
-            
-            nav {
-                display: none !important;
-            }
-            
-            .max-w-7xl {
-                max-width: none !important;
-            }
-            
-            .grid {
-                break-inside: avoid;
-            }
-        }
-    </style>
 </body>
 </html>

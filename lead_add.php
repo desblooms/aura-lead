@@ -11,7 +11,7 @@ require_once 'includes/functions.php';
 require_login();
 require_role(['admin', 'sales']);
 
-$current_user = get_current_user();
+$current_user = get_logged_in_user();
 $errors = [];
 $success_message = '';
 

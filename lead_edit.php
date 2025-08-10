@@ -10,7 +10,7 @@ require_once 'includes/functions.php';
 // Require login
 require_login();
 
-$current_user = get_current_user();
+$current_user = get_logged_in_user();
 $errors = [];
 $success_message = '';
 
@@ -590,17 +590,6 @@ $is_readonly = !has_permission('edit_leads');
                 return false;
             }
         }
-
-        // Auto-save functionality (future enhancement)
-        function autoSave() {
-            // Implementation for auto-saving form data
-            console.log('Auto-save feature can be implemented here');
-        }
-
-        // Set up auto-save every 30 seconds if editing
-        <?php if (!$is_readonly): ?>
-        setInterval(autoSave, 30000);
-        <?php endif; ?>
     </script>
 </body>
 </html>

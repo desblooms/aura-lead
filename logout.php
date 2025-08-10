@@ -4,7 +4,7 @@
  * Lead Management System
  */
 
-require_once '../includes/auth.php';
+require_once 'includes/auth.php';
 
 // Log out user
 logout_user();

@@ -11,7 +11,7 @@ require_once 'includes/functions.php';
 require_login();
 
 // Get current user
-$current_user = get_current_user();
+$current_user = get_logged_in_user();
 if (!$current_user) {
     header('Location: login.php');
     exit();
