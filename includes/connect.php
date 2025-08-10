@@ -6,9 +6,9 @@
 
 // Database configuration
 define('DB_HOST', 'localhost');
-define('DB_USER', 'root');
-define('DB_PASS', '');
-define('DB_NAME', 'lead_management');
+define('DB_USER', 'u345095192_aura');
+define('DB_PASS', 'Aura@1212');
+define('DB_NAME', 'u345095192_auralead');
 
 // Create connection
 $conn = new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME);

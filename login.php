@@ -4,8 +4,8 @@
  * Lead Management System
  */
 
-require_once '../includes/auth.php';
-require_once '../includes/functions.php';
+require_once 'includes/auth.php';
+require_once 'includes/functions.php';
 
 // Redirect if already logged in
 if (is_logged_in()) {
