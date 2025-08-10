@@ -1,8 +1,8 @@
 -- Lead Management System Database Schema
 
 -- Create database
-CREATE DATABASE IF NOT EXISTS lead_management;
-USE lead_management;
+CREATE DATABASE IF NOT EXISTS u345095192_auralead;
+USE u345095192_auralead;
 
 -- Users table
 CREATE TABLE users (

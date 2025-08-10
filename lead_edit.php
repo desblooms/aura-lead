@@ -250,6 +250,123 @@ $is_readonly = !has_permission('edit_leads');
                                 name="client_name" 
                                 value="<?php echo sanitize_output($lead['client_name']); ?>"
                                 class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 <?php echo $is_readonly ? 'bg-gray-50' : ''; ?>"
+                                <?php echo $is_readonly ? 'readonly' : ''; ?>
+                            >
+                        </div>
+
+                        <div>
+                            <label for="industry" class="block text-sm font-medium text-gray-700">Industry</label>
+                            <select 
+                                id="industry" 
+                                name="industry" 
+                                class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 <?php echo $is_readonly ? 'bg-gray-50' : ''; ?>"
+                                <?php echo $is_readonly ? 'disabled' : ''; ?>
+                            >
+                                <option value="">Select Industry</option>
+                                <?php foreach (get_industry_options() as $industry_option): ?>
+                                    <option value="<?php echo $industry_option; ?>" <?php echo $lead['industry'] === $industry_option ? 'selected' : ''; ?>>
+                                        <?php echo $industry_option; ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label for="required_services" class="block text-sm font-medium text-gray-700">Required Services</label>
+                            <input 
+                                type="text" 
+                                id="required_services" 
+                                name="required_services" 
+                                value="<?php echo sanitize_output($lead['required_services']); ?>"
+                                placeholder="e.g., Web Development, SEO, Marketing"
+                                class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 <?php echo $is_readonly ? 'bg-gray-50' : ''; ?>"
+                                <?php echo $is_readonly ? 'readonly' : ''; ?>
+                            >
+                        </div>
+
+                        <div>
+                            <label for="website" class="block text-sm font-medium text-gray-700">Website</label>
+                            <input 
+                                type="url" 
+                                id="website" 
+                                name="website" 
+                                value="<?php echo sanitize_output($lead['website']); ?>"
+                                placeholder="https://example.com"
+                                class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 <?php echo $is_readonly ? 'bg-gray-50' : ''; ?>"
+                                <?php echo $is_readonly ? 'readonly' : ''; ?>
+                            >
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Contact Information -->
+                <div>
+                    <h3 class="text-lg font-medium text-gray-900 mb-4">Contact Information</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label for="email" class="block text-sm font-medium text-gray-700">Email</label>
+                            <input 
+                                type="email" 
+                                id="email" 
+                                name="email" 
+                                value="<?php echo sanitize_output($lead['email']); ?>"
+                                placeholder="contact@example.com"
+                                class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 <?php echo $is_readonly ? 'bg-gray-50' : ''; ?>"
+                                <?php echo $is_readonly ? 'readonly' : ''; ?>
+                            >
+                        </div>
+
+                        <div>
+                            <label for="phone" class="block text-sm font-medium text-gray-700">Phone</label>
+                            <input 
+                                type="tel" 
+                                id="phone" 
+                                name="phone" 
+                                value="<?php echo sanitize_output($lead['phone']); ?>"
+                                placeholder="+1234567890"
+                                class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 <?php echo $is_readonly ? 'bg-gray-50' : ''; ?>"
+                                <?php echo $is_readonly ? 'readonly' : ''; ?>
+                            >
+                        </div>
+
+                        <div>
+                            <label for="whatsapp" class="block text-sm font-medium text-gray-700">WhatsApp</label>
+                            <input 
+                                type="tel" 
+                                id="whatsapp" 
+                                name="whatsapp" 
+                                value="<?php echo sanitize_output($lead['whatsapp']); ?>"
+                                placeholder="+1234567890"
+                                class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 <?php echo $is_readonly ? 'bg-gray-50' : ''; ?>"
+                                <?php echo $is_readonly ? 'readonly' : ''; ?>
+                            >
+                        </div>
+
+                        <div>
+                            <label for="mail" class="block text-sm font-medium text-gray-700">Secondary Email</label>
+                            <input 
+                                type="email" 
+                                id="mail" 
+                                name="mail" 
+                                value="<?php echo sanitize_output($lead['mail']); ?>"
+                                placeholder="secondary@example.com"
+                                class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 <?php echo $is_readonly ? 'bg-gray-50' : ''; ?>"
+                                <?php echo $is_readonly ? 'readonly' : ''; ?>
+                            >
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Lead Details -->
+                <div>
+                    <h3 class="text-lg font-medium text-gray-900 mb-4">Lead Details</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label for="client_status" class="block text-sm font-medium text-gray-700">Status</label>
+                            <select 
+                                id="client_status" 
+                                name="client_status" 
+                                class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 <?php echo $is_readonly ? 'bg-gray-50' : ''; ?>"
                                 <?php echo $is_readonly ? 'disabled' : ''; ?>
                             >
                                 <?php foreach (get_status_options() as $value => $label): ?>
@@ -486,4 +603,4 @@ $is_readonly = !has_permission('edit_leads');
         <?php endif; ?>
     </script>
 </body>
-</html> 
+</html>
