@@ -1,6 +1,6 @@
 <?php
 /**
- * Add Lead Page
+ * Enhanced Add Lead Page with Ad Source Selection
  * Lead Management System
  */
 
@@ -21,6 +21,16 @@ if ($current_user['role'] === 'admin') {
     $sales_staff = get_sales_staff();
 }
 
+// Get active running ads for source selection
+$running_ads = get_all("
+    SELECT ra.*, s.service_name, u.full_name as assigned_sales_name 
+    FROM running_ads ra 
+    LEFT JOIN services s ON ra.service_id = s.id 
+    LEFT JOIN users u ON ra.assigned_sales_member = u.id 
+    WHERE ra.is_active = 1 
+    ORDER BY ra.ad_name
+");
+
 // Handle form submission
 if ($_POST && isset($_POST['add_lead'])) {
     // Verify CSRF token
@@ -40,13 +50,28 @@ if ($_POST && isset($_POST['add_lead'])) {
         $client_status = sanitize_input($_POST['client_status']);
         $notes = sanitize_input($_POST['notes']);
         $industry = sanitize_input($_POST['industry']);
+        $lead_source = sanitize_input($_POST['lead_source']);
+        $source_ad_id = !empty($_POST['source_ad_id']) ? (int)$_POST['source_ad_id'] : null;
         
-        // Assignment logic
-        if ($current_user['role'] === 'admin') {
-            $assigned_to = !empty($_POST['assigned_to']) ? (int)$_POST['assigned_to'] : null;
+        // Assignment logic based on lead source
+        if ($source_ad_id) {
+            // Get the ad details to auto-assign to the designated sales member
+            $ad_details = get_row("SELECT assigned_sales_member FROM running_ads WHERE id = ?", [$source_ad_id], 'i');
+            if ($ad_details) {
+                $assigned_to = $ad_details['assigned_sales_member'];
+            } else {
+                $assigned_to = $current_user['role'] === 'admin' ? 
+                    (!empty($_POST['assigned_to']) ? (int)$_POST['assigned_to'] : null) : 
+                    $current_user['id'];
+            }
         } else {
-            // Sales staff can only assign to themselves
-            $assigned_to = $current_user['id'];
+            // Manual assignment
+            if ($current_user['role'] === 'admin') {
+                $assigned_to = !empty($_POST['assigned_to']) ? (int)$_POST['assigned_to'] : null;
+            } else {
+                // Sales staff can only assign to themselves
+                $assigned_to = $current_user['id'];
+            }
         }
 
         // Validation
@@ -72,7 +97,7 @@ if ($_POST && isset($_POST['add_lead'])) {
 
         // If no errors, insert the lead
         if (empty($errors)) {
-            $query = "INSERT INTO leads (client_name, required_services, website, phone, email, call_enquiry, mail, whatsapp, follow_up, client_status, notes, industry, assigned_to) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            $query = "INSERT INTO leads (client_name, required_services, website, phone, email, call_enquiry, mail, whatsapp, follow_up, client_status, notes, industry, assigned_to, source_ad_id, lead_source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
             
             $params = [
                 $client_name,
@@ -87,11 +112,17 @@ if ($_POST && isset($_POST['add_lead'])) {
                 $client_status,
                 $notes,
                 $industry,
-                $assigned_to
+                $assigned_to,
+                $source_ad_id,
+                $lead_source
             ];
             
-            if (execute_query($query, $params, 'ssssssssssssi')) {
-                redirect_with_message('index.php', 'Lead added successfully!', 'success');
+            if (execute_query($query, $params, 'ssssssssssssiis')) {
+                $success_msg = 'Lead added successfully!';
+                if ($source_ad_id) {
+                    $success_msg .= ' Lead has been automatically assigned based on the selected ad campaign.';
+                }
+                redirect_with_message('index.php', $success_msg, 'success');
             } else {
                 $errors[] = 'Failed to add lead. Please try again.';
             }
@@ -101,6 +132,20 @@ if ($_POST && isset($_POST['add_lead'])) {
 
 // Generate CSRF token
 $csrf_token = generate_csrf_token();
+
+// Lead source options
+$lead_sources = [
+    'Manual' => 'Manual Entry',
+    'Facebook Ad' => 'Facebook Ad',
+    'Google Ad' => 'Google Ad', 
+    'Instagram Ad' => 'Instagram Ad',
+    'LinkedIn Ad' => 'LinkedIn Ad',
+    'Website Form' => 'Website Contact Form',
+    'Phone Call' => 'Phone Call',
+    'Email' => 'Email Inquiry',
+    'Referral' => 'Referral',
+    'Other' => 'Other'
+];
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -124,6 +169,9 @@ $csrf_token = generate_csrf_token();
                         <?php echo ucfirst($current_user['role']); ?>
                     </span>
                     <a href="index.php" class="text-blue-600 hover:text-blue-800">Dashboard</a>
+                    <?php if ($current_user['role'] === 'marketing' || $current_user['role'] === 'admin'): ?>
+                        <a href="running_ads.php" class="text-blue-600 hover:text-blue-800">Running Ads</a>
+                    <?php endif; ?>
                     <a href="logout.php" class="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded text-sm">
                         Logout
                     </a>
@@ -169,6 +217,64 @@ $csrf_token = generate_csrf_token();
         <div class="bg-white shadow rounded-lg">
             <form method="POST" action="" class="space-y-6 p-6">
                 <input type="hidden" name="csrf_token" value="<?php echo $csrf_token; ?>">
+
+                <!-- Lead Source Information -->
+                <div>
+                    <h3 class="text-lg font-medium text-gray-900 mb-4">Lead Source Information</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label for="lead_source" class="block text-sm font-medium text-gray-700">Lead Source</label>
+                            <select 
+                                id="lead_source" 
+                                name="lead_source" 
+                                class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                onchange="toggleAdSelection()"
+                            >
+                                <?php foreach ($lead_sources as $value => $label): ?>
+                                    <option value="<?php echo $value; ?>" <?php echo (isset($_POST['lead_source']) && $_POST['lead_source'] === $value) ? 'selected' : ($value === 'Manual' ? 'selected' : ''); ?>>
+                                        <?php echo $label; ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+
+                        <div id="ad_selection" style="display: none;">
+                            <label for="source_ad_id" class="block text-sm font-medium text-gray-700">Running Ad Campaign</label>
+                            <select 
+                                id="source_ad_id" 
+                                name="source_ad_id" 
+                                class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                            >
+                                <option value="">Select Ad Campaign</option>
+                                <?php foreach ($running_ads as $ad): ?>
+                                    <option value="<?php echo $ad['id']; ?>" 
+                                            data-assigned-to="<?php echo $ad['assigned_sales_member']; ?>"
+                                            data-assigned-name="<?php echo sanitize_output($ad['assigned_sales_name']); ?>"
+                                            <?php echo (isset($_POST['source_ad_id']) && $_POST['source_ad_id'] == $ad['id']) ? 'selected' : ''; ?>>
+                                        <?php echo sanitize_output($ad['ad_name']) . ' (' . sanitize_output($ad['service_name']) . ')'; ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                            <p class="text-xs text-gray-500 mt-1">Lead will be automatically assigned to the sales member configured for this ad</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Auto-assignment notice -->
+                    <div id="auto_assignment_notice" class="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md" style="display: none;">
+                        <div class="flex">
+                            <div class="flex-shrink-0">
+                                <svg class="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
+                                </svg>
+                            </div>
+                            <div class="ml-3">
+                                <p class="text-sm text-blue-700">
+                                    <strong>Auto-Assignment:</strong> This lead will be automatically assigned to <span id="assigned_sales_name"></span> based on the selected ad campaign.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
                 <!-- Client Information -->
                 <div>
@@ -315,8 +421,8 @@ $csrf_token = generate_csrf_token();
                         </div>
 
                         <?php if ($current_user['role'] === 'admin'): ?>
-                        <div>
-                            <label for="assigned_to" class="block text-sm font-medium text-gray-700">Assign To</label>
+                        <div id="manual_assignment">
+                            <label for="assigned_to" class="block text-sm font-medium text-gray-700">Assign To (Manual Override)</label>
                             <select 
                                 id="assigned_to" 
                                 name="assigned_to" 
@@ -329,6 +435,7 @@ $csrf_token = generate_csrf_token();
                                     </option>
                                 <?php endforeach; ?>
                             </select>
+                            <p class="text-xs text-gray-500 mt-1">Only use this if you want to override the automatic assignment from ad campaigns</p>
                         </div>
                         <?php endif; ?>
 
@@ -374,10 +481,73 @@ $csrf_token = generate_csrf_token();
     </div>
 
     <script>
+        // Toggle ad selection based on lead source
+        function toggleAdSelection() {
+            const leadSource = document.getElementById('lead_source').value;
+            const adSelection = document.getElementById('ad_selection');
+            const sourceAdSelect = document.getElementById('source_ad_id');
+            
+            if (leadSource.includes('Ad') || leadSource === 'Facebook Ad' || leadSource === 'Google Ad' || leadSource === 'Instagram Ad' || leadSource === 'LinkedIn Ad') {
+                adSelection.style.display = 'block';
+                sourceAdSelect.required = true;
+            } else {
+                adSelection.style.display = 'none';
+                sourceAdSelect.required = false;
+                sourceAdSelect.value = '';
+                hideAutoAssignmentNotice();
+            }
+        }
+
+        // Show auto-assignment notice
+        function showAutoAssignmentNotice(salesName) {
+            const notice = document.getElementById('auto_assignment_notice');
+            const assignedName = document.getElementById('assigned_sales_name');
+            assignedName.textContent = salesName;
+            notice.style.display = 'block';
+            
+            // Hide manual assignment for admin if auto-assignment is active
+            const manualAssignment = document.getElementById('manual_assignment');
+            if (manualAssignment) {
+                manualAssignment.style.display = 'none';
+            }
+        }
+
+        // Hide auto-assignment notice
+        function hideAutoAssignmentNotice() {
+            const notice = document.getElementById('auto_assignment_notice');
+            notice.style.display = 'none';
+            
+            // Show manual assignment for admin
+            const manualAssignment = document.getElementById('manual_assignment');
+            if (manualAssignment) {
+                manualAssignment.style.display = 'block';
+            }
+        }
+
+        // Handle ad selection change
+        document.addEventListener('DOMContentLoaded', function() {
+            const sourceAdSelect = document.getElementById('source_ad_id');
+            if (sourceAdSelect) {
+                sourceAdSelect.addEventListener('change', function() {
+                    const selectedOption = this.options[this.selectedIndex];
+                    const assignedName = selectedOption.getAttribute('data-assigned-name');
+                    
+                    if (this.value && assignedName) {
+                        showAutoAssignmentNotice(assignedName);
+                    } else {
+                        hideAutoAssignmentNotice();
+                    }
+                });
+            }
+        });
+
         // Form validation
         document.addEventListener('DOMContentLoaded', function() {
             const form = document.querySelector('form');
             const clientNameField = document.getElementById('client_name');
+
+            // Initialize form state
+            toggleAdSelection();
 
             form.addEventListener('submit', function(e) {
                 let isValid = true;
@@ -404,6 +574,14 @@ $csrf_token = generate_csrf_token();
                 const websiteField = document.getElementById('website');
                 if (websiteField.value && !isValidURL(websiteField.value)) {
                     websiteField.classList.add('border-red-500');
+                    isValid = false;
+                }
+
+                // Validate ad selection if required
+                const leadSource = document.getElementById('lead_source').value;
+                const sourceAdSelect = document.getElementById('source_ad_id');
+                if (leadSource.includes('Ad') && !sourceAdSelect.value) {
+                    sourceAdSelect.classList.add('border-red-500');
                     isValid = false;
                 }
 
@@ -438,6 +616,9 @@ $csrf_token = generate_csrf_token();
                 this.value = this.value.replace(/[^\d\s\-\(\)\+]/g, '');
             });
         });
+
+        // Lead source change handler
+        document.getElementById('lead_source').addEventListener('change', toggleAdSelection);
     </script>
 </body>
 </html>
