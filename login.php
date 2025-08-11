@@ -88,16 +88,6 @@ if ($_POST && isset($_POST['login'])) {
             </button>
         </form>
 
-        <div class="mt-8 text-center">
-            <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <p class="text-sm text-blue-800 font-semibold mb-2">Demo Accounts:</p>
-                <div class="text-xs text-blue-700 space-y-1">
-                    <p><strong>Admin:</strong> admin / password</p>
-                    <p><strong>Sales:</strong> john_sales / password</p>
-                    <p><strong>Marketing:</strong> mary_marketing / password</p>
-                </div>
-            </div>
-        </div>
     </div>
 
     <script>

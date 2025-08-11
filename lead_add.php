@@ -1,6 +1,6 @@
 <?php
 /**
- * Enhanced Add Lead Page with Ad Source Selection
+ * Enhanced Add Lead Page with Ad Source Selection and Service Dropdown
  * Lead Management System
  */
 
@@ -40,6 +40,7 @@ if ($_POST && isset($_POST['add_lead'])) {
         // Sanitize and validate inputs
         $client_name = sanitize_input($_POST['client_name']);
         $required_services = sanitize_input($_POST['required_services']);
+        $selected_service_ids = sanitize_input($_POST['selected_service_ids']);
         $website = sanitize_input($_POST['website']);
         $phone = sanitize_input($_POST['phone']);
         $email = sanitize_input($_POST['email']);
@@ -97,11 +98,12 @@ if ($_POST && isset($_POST['add_lead'])) {
 
         // If no errors, insert the lead
         if (empty($errors)) {
-            $query = "INSERT INTO leads (client_name, required_services, website, phone, email, call_enquiry, mail, whatsapp, follow_up, client_status, notes, industry, assigned_to, source_ad_id, lead_source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            $query = "INSERT INTO leads (client_name, required_services, selected_service_ids, website, phone, email, call_enquiry, mail, whatsapp, follow_up, client_status, notes, industry, assigned_to, source_ad_id, lead_source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
             
             $params = [
                 $client_name,
                 $required_services,
+                $selected_service_ids,
                 $website,
                 $phone,
                 $email,
@@ -117,7 +119,7 @@ if ($_POST && isset($_POST['add_lead'])) {
                 $lead_source
             ];
             
-            if (execute_query($query, $params, 'ssssssssssssiis')) {
+            if (execute_query($query, $params, 'sssssssssssssiis')) {
                 $success_msg = 'Lead added successfully!';
                 if ($source_ad_id) {
                     $success_msg .= ' Lead has been automatically assigned based on the selected ad campaign.';
@@ -169,6 +171,9 @@ $lead_sources = [
                         <?php echo ucfirst($current_user['role']); ?>
                     </span>
                     <a href="index.php" class="text-blue-600 hover:text-blue-800">Dashboard</a>
+                    <?php if (has_permission('view_analytics')): ?>
+                        <a href="analytics.php" class="text-blue-600 hover:text-blue-800">Analytics</a>
+                    <?php endif; ?>
                     <?php if ($current_user['role'] === 'marketing' || $current_user['role'] === 'admin'): ?>
                         <a href="running_ads.php" class="text-blue-600 hover:text-blue-800">Running Ads</a>
                     <?php endif; ?>
@@ -312,14 +317,39 @@ $lead_sources = [
 
                         <div>
                             <label for="required_services" class="block text-sm font-medium text-gray-700">Required Services</label>
-                            <input 
-                                type="text" 
-                                id="required_services" 
-                                name="required_services" 
-                                value="<?php echo isset($_POST['required_services']) ? sanitize_output($_POST['required_services']) : ''; ?>"
-                                placeholder="e.g., Web Development, SEO, Marketing"
-                                class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                            >
+                            <div class="mt-1">
+                                <select 
+                                    id="service_selector" 
+                                    class="block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 mb-2"
+                                >
+                                    <option value="">Select a service to add</option>
+                                    <?php 
+                                    $active_services = get_active_services();
+                                    $services_by_category = [];
+                                    foreach ($active_services as $service) {
+                                        $services_by_category[$service['service_category']][] = $service;
+                                    }
+                                    ?>
+                                    <?php foreach ($services_by_category as $category => $services): ?>
+                                        <optgroup label="<?php echo sanitize_output($category); ?>">
+                                            <?php foreach ($services as $service): ?>
+                                                <option value="<?php echo $service['id']; ?>" data-name="<?php echo sanitize_output($service['service_name']); ?>">
+                                                    <?php echo sanitize_output($service['service_name']); ?>
+                                                </option>
+                                            <?php endforeach; ?>
+                                        </optgroup>
+                                    <?php endforeach; ?>
+                                </select>
+                                
+                                <!-- Selected Services Display -->
+                                <div id="selected_services" class="min-h-[40px] border border-gray-300 rounded-md p-2 bg-gray-50">
+                                    <div class="text-sm text-gray-500" id="no_services_message">No services selected</div>
+                                </div>
+                                
+                                <!-- Hidden inputs to store selected services -->
+                                <input type="hidden" id="required_services" name="required_services" value="<?php echo isset($_POST['required_services']) ? sanitize_output($_POST['required_services']) : ''; ?>">
+                                <input type="hidden" id="selected_service_ids" name="selected_service_ids" value="<?php echo isset($_POST['selected_service_ids']) ? sanitize_output($_POST['selected_service_ids']) : ''; ?>">
+                            </div>
                         </div>
 
                         <div>
@@ -481,6 +511,108 @@ $lead_sources = [
     </div>
 
     <script>
+        // Service Selection Management
+        let selectedServices = [];
+
+        // Initialize selected services from POST data if available
+        document.addEventListener('DOMContentLoaded', function() {
+            const requiredServicesValue = document.getElementById('required_services').value;
+            const selectedServiceIdsValue = document.getElementById('selected_service_ids').value;
+            
+            if (requiredServicesValue && selectedServiceIdsValue) {
+                try {
+                    const serviceIds = JSON.parse(selectedServiceIdsValue);
+                    const serviceNames = requiredServicesValue.split(', ');
+                    
+                    serviceIds.forEach((id, index) => {
+                        if (serviceNames[index]) {
+                            selectedServices.push({
+                                id: parseInt(id),
+                                name: serviceNames[index]
+                            });
+                        }
+                    });
+                    
+                    updateSelectedServicesDisplay();
+                } catch (e) {
+                    console.error('Error parsing selected services:', e);
+                }
+            }
+        });
+
+        // Handle service selection
+        document.getElementById('service_selector').addEventListener('change', function() {
+            const selectedOption = this.options[this.selectedIndex];
+            if (selectedOption.value) {
+                const serviceId = parseInt(selectedOption.value);
+                const serviceName = selectedOption.getAttribute('data-name');
+                
+                // Check if service is already selected
+                if (!selectedServices.find(service => service.id === serviceId)) {
+                    selectedServices.push({
+                        id: serviceId,
+                        name: serviceName
+                    });
+                    
+                    updateSelectedServicesDisplay();
+                    updateHiddenFields();
+                }
+                
+                // Reset selector
+                this.value = '';
+            }
+        });
+
+        // Remove service from selection
+        function removeService(serviceId) {
+            selectedServices = selectedServices.filter(service => service.id !== serviceId);
+            updateSelectedServicesDisplay();
+            updateHiddenFields();
+        }
+
+        // Update the visual display of selected services
+        function updateSelectedServicesDisplay() {
+            const container = document.getElementById('selected_services');
+            const noServicesMessage = document.getElementById('no_services_message');
+            
+            if (selectedServices.length === 0) {
+                noServicesMessage.style.display = 'block';
+                // Clear any service tags
+                const serviceTags = container.querySelectorAll('.service-tag');
+                serviceTags.forEach(tag => tag.remove());
+            } else {
+                noServicesMessage.style.display = 'none';
+                
+                // Clear existing tags
+                const existingTags = container.querySelectorAll('.service-tag');
+                existingTags.forEach(tag => tag.remove());
+                
+                // Add new tags
+                selectedServices.forEach(service => {
+                    const serviceTag = document.createElement('span');
+                    serviceTag.className = 'service-tag inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 mr-2 mb-2';
+                    serviceTag.innerHTML = `
+                        ${service.name}
+                        <button type="button" onclick="removeService(${service.id})" class="ml-1 text-blue-600 hover:text-blue-800">
+                            <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+                            </svg>
+                        </button>
+                    `;
+                    container.appendChild(serviceTag);
+                });
+            }
+        }
+
+        // Update hidden form fields
+        function updateHiddenFields() {
+            const serviceNames = selectedServices.map(service => service.name).join(', ');
+            const serviceIds = JSON.stringify(selectedServices.map(service => service.id));
+            
+            document.getElementById('required_services').value = serviceNames;
+            document.getElementById('selected_service_ids').value = serviceIds;
+        }
+
         // Toggle ad selection based on lead source
         function toggleAdSelection() {
             const leadSource = document.getElementById('lead_source').value;

@@ -144,7 +144,34 @@ function get_lead_by_id($lead_id, $user_id, $role) {
  * @return array
  */
 function get_active_services() {
-    return get_all("SELECT id, service_name, service_category FROM services WHERE is_active = 1 ORDER BY service_name");
+    return get_all("SELECT id, service_name, service_category FROM services WHERE is_active = 1 ORDER BY service_category, service_name");
+}
+
+/**
+ * Get all services with stats
+ * @return array
+ */
+function get_services_with_stats() {
+    $query = "SELECT s.*, 
+                     COUNT(DISTINCT ra.id) as running_ads_count,
+                     COUNT(DISTINCT l.id) as leads_count,
+                     u.full_name as created_by_name
+              FROM services s 
+              LEFT JOIN running_ads ra ON s.id = ra.service_id AND ra.is_active = 1
+              LEFT JOIN leads l ON FIND_IN_SET(s.id, REPLACE(REPLACE(l.selected_service_ids, '[', ''), ']', ''))
+              LEFT JOIN users u ON s.created_by = u.id
+              GROUP BY s.id
+              ORDER BY s.created_at DESC";
+    return get_all($query);
+}
+
+/**
+ * Get service by ID
+ * @param int $service_id
+ * @return array|null
+ */
+function get_service_by_id($service_id) {
+    return get_row("SELECT * FROM services WHERE id = ?", [$service_id], 'i');
 }
 
 /**
@@ -185,11 +212,26 @@ function get_leads_by_ad_source($ad_id) {
 }
 
 /**
+ * Get leads by service for analytics
+ * @param int $service_id
+ * @return array
+ */
+function get_leads_by_service($service_id) {
+    $query = "SELECT l.*, u.full_name as assigned_user 
+              FROM leads l 
+              LEFT JOIN users u ON l.assigned_to = u.id 
+              WHERE FIND_IN_SET(?, REPLACE(REPLACE(l.selected_service_ids, '[', ''), ']', ''))
+              ORDER BY l.created_at DESC";
+    return get_all($query, [$service_id], 'i');
+}
+
+/**
  * Format date for display
  * @param string $date
  * @return string
  */
 function format_date($date) {
+    if (!$date) return 'Not set';
     return date('M j, Y', strtotime($date));
 }
 
@@ -199,6 +241,7 @@ function format_date($date) {
  * @return string
  */
 function format_datetime($datetime) {
+    if (!$datetime) return 'Not set';
     return date('M j, Y g:i A', strtotime($datetime));
 }
 
@@ -381,9 +424,10 @@ function calculate_cost_per_lead($budget, $leads_count) {
  * @param string $start_date
  * @param string $end_date
  * @param int|null $ad_id
+ * @param int|null $service_id
  * @return array
  */
-function get_lead_stats_by_date($start_date, $end_date, $ad_id = null) {
+function get_lead_stats_by_date($start_date, $end_date, $ad_id = null, $service_id = null) {
     $where_clause = "WHERE l.created_at BETWEEN ? AND ?";
     $params = [$start_date, $end_date];
     $types = 'ss';
@@ -391,6 +435,12 @@ function get_lead_stats_by_date($start_date, $end_date, $ad_id = null) {
     if ($ad_id) {
         $where_clause .= " AND l.source_ad_id = ?";
         $params[] = $ad_id;
+        $types .= 'i';
+    }
+    
+    if ($service_id) {
+        $where_clause .= " AND FIND_IN_SET(?, REPLACE(REPLACE(l.selected_service_ids, '[', ''), ']', ''))";
+        $params[] = $service_id;
         $types .= 'i';
     }
     
@@ -426,6 +476,54 @@ function get_top_performing_ads($limit = 5) {
               LIMIT ?";
     
     return get_all($query, [$limit], 'i');
+}
+
+/**
+ * Get top performing services
+ * @param int $limit
+ * @return array
+ */
+function get_top_performing_services($limit = 5) {
+    $query = "SELECT s.*, 
+                     COUNT(DISTINCT l.id) as lead_count,
+                     SUM(CASE WHEN l.client_status IN ('Interested', 'Meeting Scheduled') THEN 1 ELSE 0 END) as quality_leads
+              FROM services s 
+              LEFT JOIN leads l ON FIND_IN_SET(s.id, REPLACE(REPLACE(l.selected_service_ids, '[', ''), ']', ''))
+              WHERE s.is_active = 1
+              GROUP BY s.id
+              HAVING lead_count > 0
+              ORDER BY quality_leads DESC, lead_count DESC
+              LIMIT ?";
+    
+    return get_all($query, [$limit], 'i');
+}
+
+/**
+ * Get service performance analytics
+ * @param int|null $service_id
+ * @return array
+ */
+function get_service_analytics($service_id = null) {
+    $where_clause = $service_id ? "WHERE s.id = ?" : "WHERE s.is_active = 1";
+    $params = $service_id ? [$service_id] : [];
+    $types = $service_id ? 'i' : '';
+    
+    $query = "SELECT s.*, 
+                     COUNT(DISTINCT l.id) as total_leads,
+                     COUNT(DISTINCT ra.id) as running_ads_count,
+                     SUM(CASE WHEN l.client_status = 'Interested' THEN 1 ELSE 0 END) as interested_leads,
+                     SUM(CASE WHEN l.client_status = 'Meeting Scheduled' THEN 1 ELSE 0 END) as meeting_leads,
+                     SUM(CASE WHEN l.client_status = 'Not Interested' THEN 1 ELSE 0 END) as not_interested_leads,
+                     SUM(CASE WHEN l.client_status = 'Budget Not Met' THEN 1 ELSE 0 END) as budget_not_met_leads,
+                     SUM(ra.budget) as total_ad_budget
+              FROM services s 
+              LEFT JOIN running_ads ra ON s.id = ra.service_id AND ra.is_active = 1
+              LEFT JOIN leads l ON FIND_IN_SET(s.id, REPLACE(REPLACE(l.selected_service_ids, '[', ''), ']', ''))
+              $where_clause
+              GROUP BY s.id
+              ORDER BY total_leads DESC";
+    
+    return $service_id ? get_row($query, $params, $types) : get_all($query, $params, $types);
 }
 
 /**
@@ -492,37 +590,514 @@ function has_permission($permission) {
             return in_array($role, ['admin', 'marketing']);
         case 'assign_leads':
             return in_array($role, ['admin', 'marketing']);
+        case 'view_service_analytics':
+            return in_array($role, ['admin', 'marketing']);
+        case 'create_services':
+            return $role === 'admin';
+        case 'edit_services':
+            return $role === 'admin';
+        case 'delete_services':
+            return $role === 'admin';
         default:
             return false;
     }
 }
 
 /**
- * Check if user needs to be imported from original functions.php
+ * Get current logged in user information
+ * @return array|null
  */
-if (!function_exists('get_logged_in_user')) {
-    /**
-     * Get current logged in user information
-     * @return array|null
-     */
-    function get_logged_in_user() {
-        if (!isset($_SESSION['user_id']) || empty($_SESSION['user_id'])) {
-            return null;
-        }
-        
-        $query = "SELECT id, username, full_name, role FROM users WHERE id = ?";
-        return get_row($query, [$_SESSION['user_id']], 'i');
+function get_logged_in_user() {
+    if (!isset($_SESSION['user_id']) || empty($_SESSION['user_id'])) {
+        return null;
     }
+    
+    $query = "SELECT id, username, full_name, role FROM users WHERE id = ? AND is_active = 1";
+    return get_row($query, [$_SESSION['user_id']], 'i');
 }
 
-if (!function_exists('get_sales_staff')) {
-    /**
-     * Get sales staff only for assignment
-     * @return array
-     */
-    function get_sales_staff() {
-        $query = "SELECT id, username, full_name FROM users WHERE role = 'sales' AND is_active = 1 ORDER BY full_name";
-        return get_all($query);
+/**
+ * Get sales staff only for assignment
+ * @return array
+ */
+function get_sales_staff() {
+    $query = "SELECT id, username, full_name FROM users WHERE role = 'sales' AND is_active = 1 ORDER BY full_name";
+    return get_all($query);
+}
+
+/**
+ * Get all users for management
+ * @return array
+ */
+function get_all_users() {
+    $query = "SELECT id, username, full_name, role, is_active, created_at FROM users ORDER BY created_at DESC";
+    return get_all($query);
+}
+
+/**
+ * Create activity log entry (future enhancement)
+ * @param int $user_id
+ * @param string $action
+ * @param string $details
+ * @param int|null $lead_id
+ */
+function log_activity($user_id, $action, $details, $lead_id = null) {
+    // Future implementation for activity logging
+    // Could create an activity_logs table to track user actions
+    $query = "INSERT INTO activity_logs (user_id, action, details, lead_id, created_at) VALUES (?, ?, ?, ?, NOW())";
+    // execute_query($query, [$user_id, $action, $details, $lead_id], 'issi');
+}
+
+/**
+ * Get dashboard statistics for current user
+ * @param int $user_id
+ * @param string $role
+ * @return array
+ */
+function get_dashboard_stats($user_id, $role) {
+    $stats = [
+        'total_leads' => 0,
+        'interested_leads' => 0,
+        'meeting_leads' => 0,
+        'not_interested_leads' => 0,
+        'pending_followups' => 0,
+        'overdue_followups' => 0,
+        'this_month_leads' => 0,
+        'active_campaigns' => 0
+    ];
+    
+    // Build query based on role
+    $where_clause = '';
+    $params = [];
+    $types = '';
+    
+    if ($role === 'sales') {
+        $where_clause = 'WHERE l.assigned_to = ?';
+        $params[] = $user_id;
+        $types = 'i';
     }
+    
+    // Get lead statistics
+    $query = "SELECT 
+                COUNT(*) as total_leads,
+                SUM(CASE WHEN l.client_status = 'Interested' THEN 1 ELSE 0 END) as interested_leads,
+                SUM(CASE WHEN l.client_status = 'Meeting Scheduled' THEN 1 ELSE 0 END) as meeting_leads,
+                SUM(CASE WHEN l.client_status = 'Not Interested' THEN 1 ELSE 0 END) as not_interested_leads,
+                SUM(CASE WHEN l.follow_up IS NOT NULL AND DATE(l.follow_up) BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 7 DAY) THEN 1 ELSE 0 END) as pending_followups,
+                SUM(CASE WHEN l.follow_up IS NOT NULL AND DATE(l.follow_up) < CURDATE() THEN 1 ELSE 0 END) as overdue_followups,
+                SUM(CASE WHEN MONTH(l.created_at) = MONTH(CURDATE()) AND YEAR(l.created_at) = YEAR(CURDATE()) THEN 1 ELSE 0 END) as this_month_leads
+              FROM leads l 
+              $where_clause";
+    
+    $result = get_row($query, $params, $types);
+    if ($result) {
+        $stats = array_merge($stats, $result);
+    }
+    
+    // Get active campaigns (for marketing and admin)
+    if (in_array($role, ['admin', 'marketing'])) {
+        $campaign_query = "SELECT COUNT(*) as active_campaigns FROM running_ads WHERE is_active = 1";
+        $campaign_result = get_row($campaign_query);
+        if ($campaign_result) {
+            $stats['active_campaigns'] = $campaign_result['active_campaigns'];
+        }
+    }
+    
+    return $stats;
+}
+
+/**
+ * Parse selected service IDs from JSON or comma-separated string
+ * @param string $selected_service_ids
+ * @return array
+ */
+function parse_selected_service_ids($selected_service_ids) {
+    if (empty($selected_service_ids)) {
+        return [];
+    }
+    
+    // Try to parse as JSON first
+    $decoded = json_decode($selected_service_ids, true);
+    if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+        return array_map('intval', $decoded);
+    }
+    
+    // Fallback to comma-separated parsing
+    $ids = explode(',', str_replace(['"', '[', ']', ' '], '', $selected_service_ids));
+    return array_filter(array_map('intval', $ids));
+}
+
+/**
+ * Get service names from IDs
+ * @param array $service_ids
+ * @return array
+ */
+function get_service_names_by_ids($service_ids) {
+    if (empty($service_ids)) {
+        return [];
+    }
+    
+    $placeholders = str_repeat('?,', count($service_ids) - 1) . '?';
+    $query = "SELECT id, service_name FROM services WHERE id IN ($placeholders) ORDER BY service_name";
+    $types = str_repeat('i', count($service_ids));
+    
+    return get_all($query, $service_ids, $types);
+}
+
+/**
+ * Format service list for display
+ * @param string $required_services
+ * @param string $selected_service_ids
+ * @return string
+ */
+function format_service_display($required_services, $selected_service_ids) {
+    if (!empty($required_services)) {
+        return $required_services;
+    }
+    
+    if (!empty($selected_service_ids)) {
+        $service_ids = parse_selected_service_ids($selected_service_ids);
+        if (!empty($service_ids)) {
+            $services = get_service_names_by_ids($service_ids);
+            return implode(', ', array_column($services, 'service_name'));
+        }
+    }
+    
+    return 'No services specified';
+}
+
+/**
+ * Get recent activity for dashboard
+ * @param int $user_id
+ * @param string $role
+ * @param int $limit
+ * @return array
+ */
+function get_recent_activity($user_id, $role, $limit = 10) {
+    $where_clause = '';
+    $params = [$limit];
+    $types = 'i';
+    
+    if ($role === 'sales') {
+        $where_clause = 'WHERE l.assigned_to = ?';
+        $params = [$user_id, $limit];
+        $types = 'ii';
+    }
+    
+    $query = "SELECT l.id, l.client_name, l.client_status, l.created_at, l.updated_at,
+                     u.full_name as assigned_user,
+                     ra.ad_name as source_campaign
+              FROM leads l 
+              LEFT JOIN users u ON l.assigned_to = u.id
+              LEFT JOIN running_ads ra ON l.source_ad_id = ra.id
+              $where_clause
+              ORDER BY l.updated_at DESC 
+              LIMIT ?";
+    
+    return get_all($query, $params, $types);
+}
+
+/**
+ * Search leads with filters
+ * @param array $filters
+ * @param int $user_id
+ * @param string $role
+ * @return array
+ */
+function search_leads($filters, $user_id, $role) {
+    $where_conditions = [];
+    $params = [];
+    $types = '';
+    
+    // Role-based access control
+    if ($role === 'sales') {
+        $where_conditions[] = 'l.assigned_to = ?';
+        $params[] = $user_id;
+        $types .= 'i';
+    }
+    
+    // Search filters
+    if (!empty($filters['search'])) {
+        $search_term = '%' . $filters['search'] . '%';
+        $where_conditions[] = '(l.client_name LIKE ? OR l.email LIKE ? OR l.phone LIKE ? OR l.required_services LIKE ?)';
+        $params = array_merge($params, [$search_term, $search_term, $search_term, $search_term]);
+        $types .= 'ssss';
+    }
+    
+    if (!empty($filters['status'])) {
+        $where_conditions[] = 'l.client_status = ?';
+        $params[] = $filters['status'];
+        $types .= 's';
+    }
+    
+    if (!empty($filters['industry'])) {
+        $where_conditions[] = 'l.industry = ?';
+        $params[] = $filters['industry'];
+        $types .= 's';
+    }
+    
+    if (!empty($filters['assigned_to'])) {
+        $where_conditions[] = 'l.assigned_to = ?';
+        $params[] = $filters['assigned_to'];
+        $types .= 'i';
+    }
+    
+    if (!empty($filters['date_from'])) {
+        $where_conditions[] = 'DATE(l.created_at) >= ?';
+        $params[] = $filters['date_from'];
+        $types .= 's';
+    }
+    
+    if (!empty($filters['date_to'])) {
+        $where_conditions[] = 'DATE(l.created_at) <= ?';
+        $params[] = $filters['date_to'];
+        $types .= 's';
+    }
+    
+    $where_clause = !empty($where_conditions) ? 'WHERE ' . implode(' AND ', $where_conditions) : '';
+    
+    $query = "SELECT l.*, u.full_name as assigned_user, ra.ad_name as source_ad_name, s.service_name as source_service
+              FROM leads l 
+              LEFT JOIN users u ON l.assigned_to = u.id 
+              LEFT JOIN running_ads ra ON l.source_ad_id = ra.id
+              LEFT JOIN services s ON ra.service_id = s.id
+              $where_clause
+              ORDER BY l.created_at DESC";
+    
+    return get_all($query, $params, $types);
+}
+
+/**
+ * Validate service data
+ * @param array $data
+ * @return array Array of validation errors
+ */
+function validate_service_data($data) {
+    $errors = [];
+    
+    if (empty($data['service_name'])) {
+        $errors[] = 'Service name is required.';
+    } elseif (strlen($data['service_name']) > 255) {
+        $errors[] = 'Service name must be less than 255 characters.';
+    }
+    
+    if (empty($data['service_category'])) {
+        $errors[] = 'Service category is required.';
+    } elseif (!in_array($data['service_category'], get_service_categories())) {
+        $errors[] = 'Invalid service category.';
+    }
+    
+    if (!empty($data['description']) && strlen($data['description']) > 1000) {
+        $errors[] = 'Description must be less than 1000 characters.';
+    }
+    
+    return $errors;
+}
+
+/**
+ * Validate running ad data
+ * @param array $data
+ * @return array Array of validation errors
+ */
+function validate_ad_data($data) {
+    $errors = [];
+    
+    if (empty($data['ad_name'])) {
+        $errors[] = 'Ad name is required.';
+    } elseif (strlen($data['ad_name']) > 255) {
+        $errors[] = 'Ad name must be less than 255 characters.';
+    }
+    
+    if (empty($data['service_id'])) {
+        $errors[] = 'Service selection is required.';
+    } elseif (!is_numeric($data['service_id'])) {
+        $errors[] = 'Invalid service selection.';
+    }
+    
+    if (empty($data['platform'])) {
+        $errors[] = 'Platform is required.';
+    } elseif (!in_array($data['platform'], get_ad_platforms())) {
+        $errors[] = 'Invalid platform selection.';
+    }
+    
+    if (!empty($data['budget']) && (!is_numeric($data['budget']) || $data['budget'] < 0)) {
+        $errors[] = 'Budget must be a positive number.';
+    }
+    
+    if (empty($data['start_date'])) {
+        $errors[] = 'Start date is required.';
+    } elseif (!strtotime($data['start_date'])) {
+        $errors[] = 'Invalid start date format.';
+    }
+    
+    if (!empty($data['end_date'])) {
+        if (!strtotime($data['end_date'])) {
+            $errors[] = 'Invalid end date format.';
+        } elseif (!empty($data['start_date']) && strtotime($data['end_date']) < strtotime($data['start_date'])) {
+            $errors[] = 'End date must be after start date.';
+        }
+    }
+    
+    if (empty($data['assigned_sales_member'])) {
+        $errors[] = 'Sales member assignment is required.';
+    } elseif (!is_numeric($data['assigned_sales_member'])) {
+        $errors[] = 'Invalid sales member selection.';
+    }
+    
+    return $errors;
+}
+
+/**
+ * Get export data for leads
+ * @param array $lead_ids
+ * @return array
+ */
+function get_export_lead_data($lead_ids = []) {
+    $where_clause = '';
+    $params = [];
+    $types = '';
+    
+    if (!empty($lead_ids)) {
+        $placeholders = str_repeat('?,', count($lead_ids) - 1) . '?';
+        $where_clause = "WHERE l.id IN ($placeholders)";
+        $params = $lead_ids;
+        $types = str_repeat('i', count($lead_ids));
+    }
+    
+    $query = "SELECT l.id, l.client_name, l.required_services, l.website, l.phone, l.email,
+                     l.call_enquiry, l.mail, l.whatsapp, l.follow_up, l.client_status,
+                     l.notes, l.industry, l.lead_source, l.created_at, l.updated_at,
+                     u.full_name as assigned_user,
+                     ra.ad_name as source_campaign,
+                     s.service_name as source_service
+              FROM leads l 
+              LEFT JOIN users u ON l.assigned_to = u.id
+              LEFT JOIN running_ads ra ON l.source_ad_id = ra.id
+              LEFT JOIN services s ON ra.service_id = s.id
+              $where_clause
+              ORDER BY l.created_at DESC";
+    
+    return get_all($query, $params, $types);
+}
+
+/**
+ * Clean up old sessions and temporary data
+ * @param int $days_old
+ */
+function cleanup_old_data($days_old = 30) {
+    $cutoff_date = date('Y-m-d H:i:s', strtotime("-$days_old days"));
+    
+    // Clean up old CSRF tokens (if stored in database)
+    // execute_query("DELETE FROM session_tokens WHERE created_at < ?", [$cutoff_date], 's');
+    
+    // Clean up old activity logs (if implemented)
+    // execute_query("DELETE FROM activity_logs WHERE created_at < ?", [$cutoff_date], 's');
+}
+
+/**
+ * Generate unique slug for URLs
+ * @param string $text
+ * @return string
+ */
+function generate_slug($text) {
+    $text = strtolower($text);
+    $text = preg_replace('/[^a-z0-9\s-]/', '', $text);
+    $text = preg_replace('/[\s-]+/', '-', $text);
+    return trim($text, '-');
+}
+
+/**
+ * Format currency for display
+ * @param float $amount
+ * @param string $currency
+ * @return string
+ */
+function format_currency($amount, $currency = ') {
+    return $currency . number_format($amount, 2);
+}
+
+/**
+ * Calculate percentage
+ * @param int $value
+ * @param int $total
+ * @param int $decimals
+ * @return float
+ */
+function calculate_percentage($value, $total, $decimals = 1) {
+    if ($total == 0) return 0;
+    return round(($value / $total) * 100, $decimals);
+}
+
+/**
+ * Get time ago string
+ * @param string $datetime
+ * @return string
+ */
+function time_ago($datetime) {
+    $time = time() - strtotime($datetime);
+    
+    if ($time < 60) return 'just now';
+    if ($time < 3600) return floor($time/60) . ' minutes ago';
+    if ($time < 86400) return floor($time/3600) . ' hours ago';
+    if ($time < 2592000) return floor($time/86400) . ' days ago';
+    if ($time < 31536000) return floor($time/2592000) . ' months ago';
+    
+    return floor($time/31536000) . ' years ago';
+}
+
+/**
+ * Truncate text to specified length
+ * @param string $text
+ * @param int $length
+ * @param string $suffix
+ * @return string
+ */
+function truncate_text($text, $length = 100, $suffix = '...') {
+    if (strlen($text) <= $length) {
+        return $text;
+    }
+    
+    return substr($text, 0, $length) . $suffix;
+}
+
+/**
+ * Check if current user can access lead
+ * @param array $lead
+ * @param int $user_id
+ * @param string $role
+ * @return bool
+ */
+function can_access_lead($lead, $user_id, $role) {
+    if ($role === 'admin' || $role === 'marketing') {
+        return true;
+    }
+    
+    if ($role === 'sales') {
+        return $lead['assigned_to'] == $user_id;
+    }
+    
+    return false;
+}
+
+/**
+ * Get system configuration value
+ * @param string $key
+ * @param mixed $default
+ * @return mixed
+ */
+function get_config($key, $default = null) {
+    // Future implementation for system configuration
+    // Could create a config table to store system settings
+    $configs = [
+        'items_per_page' => 20,
+        'date_format' => 'M j, Y',
+        'datetime_format' => 'M j, Y g:i A',
+        'currency_symbol' => ',
+        'timezone' => 'UTC',
+        'company_name' => 'Lead Management System',
+        'max_file_upload_size' => '5MB'
+    ];
+    
+    return isset($configs[$key]) ? $configs[$key] : $default;
 }
 ?>
