@@ -1,12 +1,13 @@
 <?php
 /**
- * Dashboard / Lead Listing Page with Universal Navigation
+ * Dashboard / Lead Listing Page with Mobile Navigation
  * Lead Management System
  */
 
 require_once 'includes/auth.php';
 require_once 'includes/functions.php';
 require_once 'includes/navigation.php';
+require_once 'includes/mobile-nav.php';
 
 // Require login
 require_login();
@@ -70,6 +71,48 @@ $interested = array_filter($leads, function($lead) { return $lead['client_status
 $meetings = array_filter($leads, function($lead) { return $lead['client_status'] === 'Meeting Scheduled'; });
 $not_interested = array_filter($leads, function($lead) { return $lead['client_status'] === 'Not Interested'; });
 $budget_not_met = array_filter($leads, function($lead) { return $lead['client_status'] === 'Budget Not Met'; });
+
+// Prepare stats array for mobile
+$mobile_stats = [
+    [
+        'label' => 'Interested',
+        'value' => count($interested),
+        'icon' => 'fas fa-heart',
+        'color' => 'text-green-600',
+        'bg_color' => 'bg-green-100',
+        'icon_color' => 'text-green-500'
+    ],
+    [
+        'label' => 'Meetings',
+        'value' => count($meetings),
+        'icon' => 'fas fa-calendar',
+        'color' => 'text-blue-600',
+        'bg_color' => 'bg-blue-100',
+        'icon_color' => 'text-blue-500'
+    ],
+    [
+        'label' => 'Not Interested',
+        'value' => count($not_interested),
+        'icon' => 'fas fa-times',
+        'color' => 'text-red-600',
+        'bg_color' => 'bg-red-100',
+        'icon_color' => 'text-red-500'
+    ],
+    [
+        'label' => 'Budget Issues',
+        'value' => count($budget_not_met),
+        'icon' => 'fas fa-dollar-sign',
+        'color' => 'text-yellow-600',
+        'bg_color' => 'bg-yellow-100',
+        'icon_color' => 'text-yellow-500'
+    ]
+];
+
+// Get sales staff for assignment (admin only)
+$sales_staff = [];
+if ($current_user['role'] === 'admin') {
+    $sales_staff = get_sales_staff();
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -132,11 +175,6 @@ $budget_not_met = array_filter($leads, function($lead) { return $lead['client_st
         
         /* Desktop ClickUp-inspired Styles */
         @media (min-width: 1024px) {
-            .desktop-sidebar {
-                background: linear-gradient(180deg, #1a1d29, #2d3748);
-                border-right: 1px solid rgba(255, 255, 255, 0.1);
-            }
-            
             .desktop-card {
                 background: rgba(255, 255, 255, 0.98);
                 backdrop-filter: blur(10px);
@@ -153,11 +191,6 @@ $budget_not_met = array_filter($leads, function($lead) { return $lead['client_st
                 background: linear-gradient(90deg, rgba(59, 130, 246, 0.03), rgba(59, 130, 246, 0.08));
                 transform: translateX(4px);
                 transition: all 0.2s ease;
-            }
-            
-            .compact-layout {
-                max-width: 1400px;
-                margin: 0 auto;
             }
         }
         
@@ -202,246 +235,121 @@ $budget_not_met = array_filter($leads, function($lead) { return $lead['client_st
             height: 300px;
         }
 
-        @keyframes ripple-animation {
-            to {
-                transform: scale(4);
-                opacity: 0;
-            }
+        /* More menu styles */
+        #more-menu.show {
+            transform: translateY(0);
         }
     </style>
 </head>
 <body class="bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 min-h-screen">
     
     <!-- Mobile Layout -->
-    <div class="lg:hidden">
-        <!-- Mobile Header with Gradient -->
-        <div class="mobile-header text-white sticky top-0 z-50">
-            <div class="px-4 py-4">
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center space-x-3">
-                        <div class="w-10 h-10 bg-white/20 backdrop-blur-lg rounded-2xl flex items-center justify-center border border-white/30">
-                            <i class="fas fa-chart-line text-white text-lg"></i>
-                        </div>
-                        <div>
-                            <h1 class="text-xl font-bold">Lead Manager</h1>
-                            <p class="text-white/80 text-sm"><?php echo count($leads); ?> total leads</p>
-                        </div>
-                    </div>
-                    <div class="flex items-center space-x-3">
-                        <div class="w-10 h-10 bg-white/20 backdrop-blur-lg rounded-full flex items-center justify-center border border-white/30">
-                            <span class="text-white text-sm font-bold">
-                                <?php echo strtoupper(substr($current_user['full_name'], 0, 1)); ?>
+    <?php echo render_mobile_header($current_user, 'Dashboard'); ?>
+    
+    <!-- Flash Messages for Mobile -->
+    <?php echo render_mobile_flash_message($flash_message); ?>
+
+    <!-- Mobile Stats Cards -->
+    <?php echo render_mobile_stats($mobile_stats); ?>
+
+    <!-- Mobile Leads List -->
+    <div class="lg:hidden px-4 pb-24">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-xl font-bold text-gray-900">Recent Leads</h2>
+            <div class="flex items-center space-x-2">
+                <a href="search_leads.php" class="w-8 h-8 bg-white rounded-xl flex items-center justify-center shadow-sm">
+                    <i class="fas fa-search text-gray-600 text-sm"></i>
+                </a>
+                <button class="w-8 h-8 bg-white rounded-xl flex items-center justify-center shadow-sm">
+                    <i class="fas fa-filter text-gray-600 text-sm"></i>
+                </button>
+            </div>
+        </div>
+        
+        <?php if (empty($leads)): ?>
+            <div class="mobile-card rounded-3xl p-8 text-center">
+                <div class="w-20 h-20 bg-gray-100 rounded-3xl flex items-center justify-center mx-auto mb-4">
+                    <i class="fas fa-inbox text-gray-400 text-3xl"></i>
+                </div>
+                <h3 class="text-lg font-semibold text-gray-900 mb-2">No leads yet</h3>
+                <p class="text-gray-500 mb-6">Start by adding your first lead to get started</p>
+                <?php if (has_permission('add_leads')): ?>
+                    <a href="lead_add.php" class="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-8 py-3 rounded-2xl font-semibold ripple">
+                        Add First Lead
+                    </a>
+                <?php endif; ?>
+            </div>
+        <?php else: ?>
+            <div class="space-y-4">
+                <?php foreach (array_slice($leads, 0, 10) as $lead): ?>
+                    <div class="mobile-card rounded-3xl p-5 ripple" onclick="window.location='lead_edit.php?id=<?php echo $lead['id']; ?>'">
+                        <div class="flex items-start justify-between mb-3">
+                            <div class="flex items-center space-x-3 flex-1">
+                                <div class="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center">
+                                    <span class="text-white font-bold text-sm">
+                                        <?php echo strtoupper(substr($lead['client_name'], 0, 1)); ?>
+                                    </span>
+                                </div>
+                                <div class="flex-1">
+                                    <h3 class="font-semibold text-gray-900 text-base leading-tight">
+                                        <?php echo sanitize_output($lead['client_name']); ?>
+                                    </h3>
+                                    <p class="text-gray-500 text-sm mt-1">
+                                        <?php echo sanitize_output(substr($lead['required_services'], 0, 30)) . (strlen($lead['required_services']) > 30 ? '...' : ''); ?>
+                                    </p>
+                                </div>
+                            </div>
+                            <span class="status-badge inline-flex px-3 py-1 text-xs font-semibold rounded-full <?php echo get_status_class($lead['client_status']); ?>">
+                                <?php echo $lead['client_status'] ?: 'New'; ?>
                             </span>
                         </div>
-                        <div class="text-right">
-                            <p class="text-sm font-medium"><?php echo explode(' ', $current_user['full_name'])[0]; ?></p>
-                            <p class="text-xs text-white/80"><?php echo ucfirst($current_user['role']); ?></p>
+                        
+                        <div class="flex items-center justify-between text-sm text-gray-600">
+                            <div class="flex items-center space-x-4">
+                                <div class="flex items-center space-x-1">
+                                    <i class="fas fa-envelope text-gray-400"></i>
+                                    <span><?php echo sanitize_output(substr($lead['email'], 0, 20)) . (strlen($lead['email']) > 20 ? '...' : ''); ?></span>
+                                </div>
+                            </div>
+                            <i class="fas fa-chevron-right text-gray-400"></i>
                         </div>
+                        
+                        <?php if ($lead['follow_up']): ?>
+                            <div class="mt-3 pt-3 border-t border-gray-100">
+                                <div class="flex items-center text-sm text-orange-600">
+                                    <i class="fas fa-clock mr-2"></i>
+                                    <span class="font-medium">Follow up: <?php echo format_date($lead['follow_up']); ?></span>
+                                </div>
+                            </div>
+                        <?php endif; ?>
                     </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Flash Messages -->
-        <?php if ($flash_message): ?>
-            <div class="mx-4 mt-4 p-4 rounded-2xl slide-up <?php echo $flash_message['type'] === 'success' ? 'bg-green-100 text-green-800 border border-green-200' : ($flash_message['type'] === 'error' ? 'bg-red-100 text-red-800 border border-red-200' : 'bg-blue-100 text-blue-800 border border-blue-200'); ?>">
-                <div class="flex items-center">
-                    <i class="fas fa-<?php echo $flash_message['type'] === 'success' ? 'check-circle' : 'exclamation-triangle'; ?> mr-3 text-lg"></i>
-                    <span class="font-medium"><?php echo sanitize_output($flash_message['text']); ?></span>
-                </div>
-            </div>
-        <?php endif; ?>
-
-        <!-- Stats Cards Mobile - App Style -->
-        <div class="px-4 py-6">
-            <div class="grid grid-cols-2 gap-4 mb-6">
-                <div class="mobile-card rounded-3xl p-5 ripple">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <p class="text-3xl font-bold text-green-600"><?php echo count($interested); ?></p>
-                            <p class="text-sm text-gray-600 font-medium">Interested</p>
-                        </div>
-                        <div class="w-12 h-12 bg-green-100 rounded-2xl flex items-center justify-center">
-                            <i class="fas fa-heart text-green-500 text-xl"></i>
-                        </div>
-                    </div>
-                </div>
+                <?php endforeach; ?>
                 
-                <div class="mobile-card rounded-3xl p-5 ripple">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <p class="text-3xl font-bold text-blue-600"><?php echo count($meetings); ?></p>
-                            <p class="text-sm text-gray-600 font-medium">Meetings</p>
-                        </div>
-                        <div class="w-12 h-12 bg-blue-100 rounded-2xl flex items-center justify-center">
-                            <i class="fas fa-calendar text-blue-500 text-xl"></i>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Additional Quick Stats -->
-            <div class="grid grid-cols-2 gap-4 mb-6">
-                <div class="mobile-card rounded-3xl p-5 ripple">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <p class="text-2xl font-bold text-red-600"><?php echo count($not_interested); ?></p>
-                            <p class="text-xs text-gray-600 font-medium">Not Interested</p>
-                        </div>
-                        <div class="w-10 h-10 bg-red-100 rounded-xl flex items-center justify-center">
-                            <i class="fas fa-times text-red-500"></i>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="mobile-card rounded-3xl p-5 ripple">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <p class="text-2xl font-bold text-yellow-600"><?php echo count($budget_not_met); ?></p>
-                            <p class="text-xs text-gray-600 font-medium">Budget Issues</p>
-                        </div>
-                        <div class="w-10 h-10 bg-yellow-100 rounded-xl flex items-center justify-center">
-                            <i class="fas fa-dollar-sign text-yellow-500"></i>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Mobile Leads List -->
-        <div class="px-4 pb-24">
-            <div class="flex items-center justify-between mb-4">
-                <h2 class="text-xl font-bold text-gray-900">Recent Leads</h2>
-                <div class="flex items-center space-x-2">
-                    <a href="search_leads.php" class="w-8 h-8 bg-white rounded-xl flex items-center justify-center shadow-sm">
-                        <i class="fas fa-search text-gray-600 text-sm"></i>
-                    </a>
-                    <button class="w-8 h-8 bg-white rounded-xl flex items-center justify-center shadow-sm">
-                        <i class="fas fa-filter text-gray-600 text-sm"></i>
-                    </button>
-                </div>
-            </div>
-            
-            <?php if (empty($leads)): ?>
-                <div class="mobile-card rounded-3xl p-8 text-center">
-                    <div class="w-20 h-20 bg-gray-100 rounded-3xl flex items-center justify-center mx-auto mb-4">
-                        <i class="fas fa-inbox text-gray-400 text-3xl"></i>
-                    </div>
-                    <h3 class="text-lg font-semibold text-gray-900 mb-2">No leads yet</h3>
-                    <p class="text-gray-500 mb-6">Start by adding your first lead to get started</p>
-                    <?php if (has_permission('add_leads')): ?>
-                        <a href="lead_add.php" class="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-8 py-3 rounded-2xl font-semibold ripple">
-                            Add First Lead
+                <?php if (count($leads) > 10): ?>
+                    <div class="text-center mt-6">
+                        <a href="search_leads.php" class="text-blue-600 font-semibold">
+                            View all <?php echo count($leads); ?> leads →
                         </a>
-                    <?php endif; ?>
-                </div>
-            <?php else: ?>
-                <div class="space-y-4">
-                    <?php foreach (array_slice($leads, 0, 10) as $lead): ?>
-                        <div class="mobile-card rounded-3xl p-5 ripple" onclick="window.location='lead_edit.php?id=<?php echo $lead['id']; ?>'">
-                            <div class="flex items-start justify-between mb-3">
-                                <div class="flex items-center space-x-3 flex-1">
-                                    <div class="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center">
-                                        <span class="text-white font-bold text-sm">
-                                            <?php echo strtoupper(substr($lead['client_name'], 0, 1)); ?>
-                                        </span>
-                                    </div>
-                                    <div class="flex-1">
-                                        <h3 class="font-semibold text-gray-900 text-base leading-tight">
-                                            <?php echo sanitize_output($lead['client_name']); ?>
-                                        </h3>
-                                        <p class="text-gray-500 text-sm mt-1">
-                                            <?php echo sanitize_output(substr($lead['required_services'], 0, 30)) . (strlen($lead['required_services']) > 30 ? '...' : ''); ?>
-                                        </p>
-                                    </div>
-                                </div>
-                                <span class="status-badge inline-flex px-3 py-1 text-xs font-semibold rounded-full <?php echo get_status_class($lead['client_status']); ?>">
-                                    <?php echo $lead['client_status'] ?: 'New'; ?>
-                                </span>
-                            </div>
-                            
-                            <div class="flex items-center justify-between text-sm text-gray-600">
-                                <div class="flex items-center space-x-4">
-                                    <div class="flex items-center space-x-1">
-                                        <i class="fas fa-envelope text-gray-400"></i>
-                                        <span><?php echo sanitize_output(substr($lead['email'], 0, 20)) . (strlen($lead['email']) > 20 ? '...' : ''); ?></span>
-                                    </div>
-                                </div>
-                                <i class="fas fa-chevron-right text-gray-400"></i>
-                            </div>
-                            
-                            <?php if ($lead['follow_up']): ?>
-                                <div class="mt-3 pt-3 border-t border-gray-100">
-                                    <div class="flex items-center text-sm text-orange-600">
-                                        <i class="fas fa-clock mr-2"></i>
-                                        <span class="font-medium">Follow up: <?php echo format_date($lead['follow_up']); ?></span>
-                                    </div>
-                                </div>
-                            <?php endif; ?>
-                        </div>
-                    <?php endforeach; ?>
-                    
-                    <?php if (count($leads) > 10): ?>
-                        <div class="text-center mt-6">
-                            <a href="search_leads.php" class="text-blue-600 font-semibold">
-                                View all <?php echo count($leads); ?> leads →
-                            </a>
-                        </div>
-                    <?php endif; ?>
-                </div>
-            <?php endif; ?>
-        </div>
-
-        <!-- Floating Action Button -->
-        <?php if (has_permission('add_leads')): ?>
-            <a href="lead_add.php" class="floating-action">
-                <div class="w-14 h-14 bg-gradient-to-r from-blue-600 to-blue-700 rounded-2xl flex items-center justify-center shadow-xl ripple">
-                    <i class="fas fa-plus text-white text-xl"></i>
-                </div>
-            </a>
-        <?php endif; ?>
-
-        <!-- Mobile Bottom Navigation -->
-        <div class="fixed bottom-0 left-0 right-0 mobile-tab-bar z-50">
-            <div class="flex justify-around py-2">
-                <a href="index.php" class="mobile-tab-item active flex flex-col items-center py-3 px-4">
-                    <i class="fas fa-home text-xl mb-1"></i>
-                    <span class="text-xs font-medium">Home</span>
-                </a>
-                
-                <?php if (has_permission('add_leads')): ?>
-                <a href="lead_add.php" class="mobile-tab-item flex flex-col items-center py-3 px-4 text-gray-500">
-                    <i class="fas fa-plus-circle text-xl mb-1"></i>
-                    <span class="text-xs font-medium">Add</span>
-                </a>
+                    </div>
                 <?php endif; ?>
-                
-                <a href="search_leads.php" class="mobile-tab-item flex flex-col items-center py-3 px-4 text-gray-500">
-                    <i class="fas fa-search text-xl mb-1"></i>
-                    <span class="text-xs font-medium">Search</span>
-                </a>
-                
-                <?php if (has_permission('view_analytics')): ?>
-                <a href="analytics.php" class="mobile-tab-item flex flex-col items-center py-3 px-4 text-gray-500">
-                    <i class="fas fa-chart-bar text-xl mb-1"></i>
-                    <span class="text-xs font-medium">Analytics</span>
-                </a>
-                <?php endif; ?>
-                
-                <a href="logout.php" class="mobile-tab-item flex flex-col items-center py-3 px-4 text-gray-500">
-                    <i class="fas fa-sign-out-alt text-xl mb-1"></i>
-                    <span class="text-xs font-medium">Logout</span>
-                </a>
             </div>
-        </div>
+        <?php endif; ?>
     </div>
 
-    <!-- Desktop Layout - ClickUp Inspired -->
+    <!-- Floating Action Button for Mobile -->
+    <?php if (has_permission('add_leads')): ?>
+        <?php echo render_mobile_fab('lead_add.php', 'fas fa-plus', 'Add Lead'); ?>
+    <?php endif; ?>
+
+    <!-- Mobile Bottom Navigation -->
+    <?php echo render_mobile_bottom_nav($current_user, $current_page, $mobile_nav_items); ?>
+
+    <!-- Desktop Layout -->
     <div class="hidden lg:block">
-        <!-- Universal Navigation for Desktop -->
+        <!-- Desktop Navigation -->
         <?php echo render_complete_navigation($current_user, $current_page, $nav_items); ?>
 
-        <div class="compact-layout py-6 px-6">
+        <div class="max-w-7xl mx-auto py-6 px-6">
             <!-- Flash Messages -->
             <?php if ($flash_message): ?>
                 <div class="mb-6 p-4 rounded-2xl backdrop-blur-lg slide-up <?php echo $flash_message['type'] === 'success' ? 'bg-green-100/80 text-green-700 border border-green-200' : ($flash_message['type'] === 'error' ? 'bg-red-100/80 text-red-700 border border-red-200' : 'bg-blue-100/80 text-blue-700 border border-blue-200'); ?>">
@@ -483,7 +391,7 @@ $budget_not_met = array_filter($leads, function($lead) { return $lead['client_st
                 </div>
             </div>
 
-            <!-- Stats Cards Desktop - ClickUp Style -->
+            <!-- Stats Cards Desktop -->
             <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
                 <div class="desktop-card rounded-2xl p-6 shadow-lg">
                     <div class="flex items-center justify-between">
@@ -542,7 +450,7 @@ $budget_not_met = array_filter($leads, function($lead) { return $lead['client_st
                 </div>
             </div>
 
-            <!-- Desktop Table - ClickUp Style -->
+            <!-- Desktop Table -->
             <div class="desktop-card rounded-2xl shadow-xl overflow-hidden">
                 <div class="px-6 py-6 border-b border-gray-100">
                     <div class="flex items-center justify-between">
@@ -635,23 +543,6 @@ $budget_not_met = array_filter($leads, function($lead) { return $lead['client_st
                                                 <span class="inline-flex px-4 py-2 text-sm font-semibold rounded-full <?php echo get_status_class($lead['client_status']); ?>">
                                                     <?php echo $lead['client_status'] ?: 'No Status'; ?>
                                                 </span>
-                                            <?php endif; ?>
-                                        </td>
-                                        <td class="px-6 py-4 text-sm text-gray-900">
-                                            <?php if (has_permission('edit_leads')): ?>
-                                                <input type="date" class="editable-field border-gray-200 rounded-lg text-sm px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
-                                                       value="<?php echo $lead['follow_up']; ?>" 
-                                                       data-lead-id="<?php echo $lead['id']; ?>" 
-                                                       data-field="follow_up">
-                                            <?php else: ?>
-                                                <?php if ($lead['follow_up']): ?>
-                                                    <div class="flex items-center text-orange-600 font-medium">
-                                                        <i class="fas fa-clock mr-2"></i>
-                                                        <?php echo format_date($lead['follow_up']); ?>
-                                                    </div>
-                                                <?php else: ?>
-                                                    <span class="text-gray-400">Not set</span>
-                                                <?php endif; ?>
                                             <?php endif; ?>
                                         </td>
                                         <td class="px-6 py-4 text-sm text-gray-600 font-medium">
@@ -955,13 +846,65 @@ $budget_not_met = array_filter($leads, function($lead) { return $lead['client_st
                     pointer-events: none;
                 `;
                 
+                const style = document.createElement('style');
+                style.textContent = `
+                    @keyframes ripple-animation {
+                        to {
+                            transform: translate(${x}px, ${y}px) scale(4);
+                            opacity: 0;
+                        }
+                    }
+                `;
+                document.head.appendChild(style);
+                
                 this.appendChild(ripple);
                 
                 setTimeout(() => {
                     ripple.remove();
+                    style.remove();
                 }, 600);
             });
         });
+
+        // Mobile menu functions
+        function toggleMoreMenu() {
+            const overlay = document.getElementById('more-menu-overlay');
+            const menu = document.getElementById('more-menu');
+            
+            if (menu.classList.contains('show')) {
+                closeMoreMenu();
+            } else {
+                openMoreMenu();
+            }
+        }
+        
+        function openMoreMenu() {
+            const overlay = document.getElementById('more-menu-overlay');
+            const menu = document.getElementById('more-menu');
+            
+            overlay.style.display = 'block';
+            setTimeout(() => {
+                menu.classList.add('show');
+            }, 10);
+        }
+        
+        function closeMoreMenu() {
+            const overlay = document.getElementById('more-menu-overlay');
+            const menu = document.getElementById('more-menu');
+            
+            menu.classList.remove('show');
+            setTimeout(() => {
+                overlay.style.display = 'none';
+            }, 300);
+        }
+        
+        // Close menu when clicking on a menu item
+        document.querySelectorAll('#more-menu a').forEach(link => {
+            link.addEventListener('click', closeMoreMenu);
+        });
+        
+        // Handle back button to close menu
+        window.addEventListener('popstate', closeMoreMenu);
     </script>
 </body>
 </html>

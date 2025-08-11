@@ -352,14 +352,3 @@ function render_complete_navigation($current_user, $current_page, $nav_items) {
 }
 ?>
 
-<!-- Usage Instructions:
-To use this navigation in any page, include this file and call:
-
-<?php 
-require_once 'includes/navigation.php';
-echo render_complete_navigation($current_user, $current_page, $nav_items);
-?>
-
-For breadcrumbs only:
-<?php echo render_breadcrumb($current_page, $nav_items); ?>
--->
