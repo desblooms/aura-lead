@@ -158,9 +158,9 @@ $csrf_token = generate_csrf_token();
                     <form method="POST" action="">
                         <input type="hidden" name="csrf_token" value="<?php echo $csrf_token; ?>">
                         
-                        <div class="space-y-4">
+                       <div class="space-y-4">
                             <div>
-                                <label for="username" class="block text-sm font-medium text-gray-700">Username</label>
+                                <label for="username" class="block text-sm font-medium text-gray-700">Username *</label>
                                 <input 
                                     type="text" 
                                     id="username" 
@@ -168,11 +168,13 @@ $csrf_token = generate_csrf_token();
                                     value="<?php echo isset($_POST['username']) ? sanitize_output($_POST['username']) : ''; ?>"
                                     class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
                                     required
+                                    autocomplete="off"
                                 >
+                                <p class="text-xs text-gray-500 mt-1">Username must be unique</p>
                             </div>
 
                             <div>
-                                <label for="full_name" class="block text-sm font-medium text-gray-700">Full Name</label>
+                                <label for="full_name" class="block text-sm font-medium text-gray-700">Full Name *</label>
                                 <input 
                                     type="text" 
                                     id="full_name" 
@@ -184,7 +186,7 @@ $csrf_token = generate_csrf_token();
                             </div>
 
                             <div>
-                                <label for="role" class="block text-sm font-medium text-gray-700">Role</label>
+                                <label for="role" class="block text-sm font-medium text-gray-700">Role *</label>
                                 <select 
                                     id="role" 
                                     name="role" 
@@ -192,29 +194,50 @@ $csrf_token = generate_csrf_token();
                                     required
                                 >
                                     <option value="">Select Role</option>
-                                    <option value="admin" <?php echo (isset($_POST['role']) && $_POST['role'] === 'admin') ? 'selected' : ''; ?>>Admin</option>
-                                    <option value="sales" <?php echo (isset($_POST['role']) && $_POST['role'] === 'sales') ? 'selected' : ''; ?>>Sales</option>
-                                    <option value="marketing" <?php echo (isset($_POST['role']) && $_POST['role'] === 'marketing') ? 'selected' : ''; ?>>Marketing</option>
+                                    <option value="admin" <?php echo (isset($_POST['role']) && $_POST['role'] === 'admin') ? 'selected' : ''; ?>>Admin - Full access to all features</option>
+                                    <option value="sales" <?php echo (isset($_POST['role']) && $_POST['role'] === 'sales') ? 'selected' : ''; ?>>Sales - Manage assigned leads</option>
+                                    <option value="marketing" <?php echo (isset($_POST['role']) && $_POST['role'] === 'marketing') ? 'selected' : ''; ?>>Marketing - View leads & manage campaigns</option>
                                 </select>
                             </div>
 
                             <div>
-                                <label for="password" class="block text-sm font-medium text-gray-700">Password</label>
+                                <label for="password" class="block text-sm font-medium text-gray-700">Password *</label>
+                                <div class="relative mt-1">
+                                    <input 
+                                        type="password" 
+                                        id="password" 
+                                        name="password" 
+                                        class="block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 pr-10"
+                                        required
+                                        minlength="6"
+                                        autocomplete="new-password"
+                                    >
+                                    <button type="button" onclick="togglePassword()" class="absolute inset-y-0 right-0 pr-3 flex items-center">
+                                        <svg class="h-5 w-5 text-gray-400" id="eye-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                        </svg>
+                                    </button>
+                                </div>
+                                <p class="text-xs text-gray-500 mt-1">Minimum 6 characters</p>
+                            </div>
+
+                            <div>
+                                <label for="confirm_password" class="block text-sm font-medium text-gray-700">Confirm Password *</label>
                                 <input 
                                     type="password" 
-                                    id="password" 
-                                    name="password" 
+                                    id="confirm_password" 
+                                    name="confirm_password" 
                                     class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
                                     required
                                     minlength="6"
                                 >
-                                <p class="text-xs text-gray-500 mt-1">Minimum 6 characters</p>
                             </div>
 
                             <button 
                                 type="submit" 
                                 name="add_user" 
-                                class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+                                class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition duration-200"
                             >
                                 Create User
                             </button>
